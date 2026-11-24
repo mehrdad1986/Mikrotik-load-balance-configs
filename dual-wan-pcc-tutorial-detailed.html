@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MikroTik RouterOS 7 — Dual WAN PCC Deep Dive</title>
+<style>
+:root{
+  --navy:#0f172a;--blue:#2563eb;--green:#059669;--purple:#7c3aed;
+  --orange:#ea580c;--bg:#f8fafc;--card:#fff;--muted:#64748b;--border:#e2e8f0;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--navy);line-height:1.65;}
+.container{max-width:960px;margin:0 auto;padding:0 20px;}
+
+.cover{background:linear-gradient(135deg,#0f172a 0%,#1e3a8a 50%,#7c3aed 100%);padding:72px 20px 110px;text-align:center;color:#fff;}
+.cover h1{font-size:2.5rem;font-weight:800;margin:0 0 12px;letter-spacing:-0.5px;}
+.cover p.sub{font-size:1.1rem;color:rgba(255,255,255,.82);max-width:640px;margin:0 auto 26px;}
+.badges{display:flex;flex-wrap:wrap;justify-content:center;gap:9px;}
+.badge{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.25);padding:5px 15px;border-radius:999px;font-size:.8rem;font-weight:600;color:#fff;}
+
+.toc-card{background:var(--card);max-width:900px;margin:-65px auto 36px;border-radius:16px;box-shadow:0 16px 48px rgba(15,23,42,.14);padding:30px 36px;position:relative;z-index:2;}
+.toc-card h2{margin:0 0 16px;font-size:1.1rem;color:var(--navy);}
+.toc-list{display:grid;grid-template-columns:1fr 1fr;gap:7px 24px;list-style:none;margin:0;padding:0;}
+.toc-list li a{color:var(--blue);text-decoration:none;font-size:.92rem;}
+.toc-list li a:hover{text-decoration:underline;}
+
+.sc{background:var(--card);border-radius:16px;box-shadow:0 6px 22px rgba(15,23,42,.07);padding:30px 32px;margin-bottom:26px;scroll-margin-top:20px;}
+.sh{display:flex;align-items:center;gap:13px;margin-bottom:10px;}
+.nb{min-width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--purple),#a855f7);color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:.9rem;flex-shrink:0;}
+.sh h2{margin:0;font-size:1.28rem;color:var(--navy);}
+.lead{color:var(--muted);font-size:.96rem;margin:0 0 16px;}
+
+pre.cb{background:#0f172a;color:#e2e8f0;padding:16px 20px;border-radius:12px;overflow-x:auto;font-family:"Consolas","Monaco",monospace;font-size:.83rem;line-height:1.6;margin:12px 0;white-space:pre-wrap;word-break:break-word;}
+code.inline{background:#f1f5f9;color:#7c3aed;padding:2px 7px;border-radius:5px;font-family:"Consolas","Monaco",monospace;font-size:.85em;}
+
+.callout{border-left:4px solid;border-radius:10px;padding:13px 17px;margin:14px 0;font-size:.91rem;}
+.callout strong.tag{display:block;font-size:.7rem;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;font-weight:700;}
+.explain{background:#eff6ff;border-color:var(--blue);}  .explain .tag{color:var(--blue);}
+.warning{background:#fff7ed;border-color:var(--orange);} .warning .tag{color:var(--orange);}
+.tip{background:#ecfdf5;border-color:var(--green);}     .tip .tag{color:var(--green);}
+.plain{background:#f5f3ff;border-color:var(--purple);}  .plain .tag{color:var(--purple);}
+.critical{background:#fef2f2;border-color:#dc2626;}     .critical .tag{color:#dc2626;}
+
+table.bd{width:100%;border-collapse:collapse;margin:14px 0;font-size:.86rem;}
+table.bd td{padding:9px 11px;border-bottom:1px solid var(--border);vertical-align:top;}
+table.bd td.cf{font-family:"Consolas","Monaco",monospace;background:#f1f5f9;color:#7c3aed;white-space:nowrap;font-size:.8rem;border-radius:5px;width:1%;}
+table.bd td.mn{color:#334155;}
+table.dt{width:100%;border-collapse:collapse;margin:14px 0;font-size:.88rem;}
+table.dt th{background:#f1f5f9;text-align:left;padding:9px 12px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--border);}
+table.dt td{padding:9px 12px;border-bottom:1px solid var(--border);color:#334155;}
+
+.flow{display:flex;flex-direction:column;align-items:center;margin:22px 0;gap:0;}
+.fb{background:#0f172a;color:#e2e8f0;padding:11px 22px;border-radius:11px;font-size:.85rem;text-align:center;max-width:540px;width:100%;}
+.fa{color:var(--muted);font-size:1.2rem;margin:3px 0;}
+.fsplit{display:flex;gap:10px;max-width:540px;width:100%;}
+.fh{flex:1;padding:11px 14px;border-radius:11px;font-size:.83rem;text-align:center;color:#fff;}
+.fh.w1{background:#1d4ed8;} .fh.w2{background:#7c3aed;}
+
+.hash-visual{background:#0f172a;border-radius:14px;padding:22px 24px;margin:16px 0;color:#e2e8f0;font-family:"Consolas","Monaco",monospace;font-size:.83rem;}
+.hash-visual .hv-row{display:flex;align-items:center;gap:10px;margin:6px 0;flex-wrap:wrap;}
+.hash-visual .hv-label{color:#94a3b8;min-width:130px;}
+.hash-visual .hv-val{color:#86efac;}
+.hash-visual .hv-arrow{color:#64748b;}
+.hash-visual .hv-bucket0{color:#60a5fa;font-weight:700;}
+.hash-visual .hv-bucket1{color:#c084fc;font-weight:700;}
+.hash-visual .hv-sep{border-top:1px solid #1e293b;margin:10px 0;}
+
+.concept-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:16px 0;}
+.concept-box{background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:16px;}
+.concept-box h4{margin:0 0 8px;font-size:.95rem;color:var(--navy);}
+.concept-box p{margin:0;font-size:.87rem;color:#475569;}
+.concept-box code{background:#e2e8f0;padding:1px 5px;border-radius:4px;font-size:.82em;}
+
+.verify-block{background:#0f172a;border-radius:12px;padding:16px 20px;margin:10px 0;}
+.verify-block .vb-label{color:#94a3b8;font-size:.75rem;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;}
+.verify-block pre{margin:0;color:#86efac;font-family:"Consolas","Monaco",monospace;font-size:.82rem;line-height:1.55;white-space:pre-wrap;word-break:break-word;}
+
+.reading-method{background:linear-gradient(135deg,#0f172a,#1e1b4b);border-radius:14px;padding:24px 26px;margin:16px 0;color:#e2e8f0;}
+.reading-method h3{margin:0 0 14px;color:#c4b5fd;font-size:1rem;}
+.rm-sentence{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0;}
+.rm-token{padding:5px 11px;border-radius:7px;font-family:"Consolas","Monaco",monospace;font-size:.8rem;font-weight:600;}
+.rm-chain{background:#1e3a8a;color:#93c5fd;}
+.rm-action{background:#14532d;color:#86efac;}
+.rm-mark{background:#4c1d95;color:#c4b5fd;}
+.rm-pass{background:#431407;color:#fdba74;}
+.rm-cond{background:#1c1917;color:#fcd34d;border:1px solid #78350f;}
+
+.nw-compare{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:14px 0;}
+.nw-box{border-radius:11px;padding:16px;text-align:center;}
+.nw-box.slow{background:#fff7ed;border:1px solid #fed7aa;}
+.nw-box.fast{background:#ecfdf5;border:1px solid #a7f3d0;}
+.nw-box .nw-time{font-size:1.8rem;font-weight:800;margin:6px 0;}
+.nw-box.slow .nw-time{color:var(--orange);}
+.nw-box.fast .nw-time{color:var(--green);}
+.nw-box p{margin:0;font-size:.82rem;color:var(--muted);}
+
+footer{text-align:center;color:var(--muted);font-size:.83rem;padding:28px 20px 48px;border-top:1px solid var(--border);margin-top:16px;}
+
+@media(max-width:640px){
+  .toc-list,.concept-grid,.nw-compare,.fsplit{grid-template-columns:1fr;flex-direction:column;}
+  .cover h1{font-size:1.85rem;}
+}
+@media print{
+  body{background:#fff;}
+  .cover{background:linear-gradient(135deg,#0f172a,#1e3a8a,#7c3aed)!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .sc,.toc-card{box-shadow:none;border:1px solid var(--border);break-inside:avoid;}
+  pre.cb,.hash-visual,.reading-method,.verify-block{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+}
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>MikroTik RouterOS 7 — Dual WAN PCC</h1>
+  <p class="sub">Complete clause-by-clause guide: how PCC hashing works, every mangle rule decoded, routing tables, failover, and verification — for the MikroTik hEX series.</p>
+  <div class="badges">
+    <span class="badge">RouterOS 7.23.1</span>
+    <span class="badge">PCC Deep Dive</span>
+    <span class="badge">Dual WAN</span>
+    <span class="badge">Failover + Netwatch</span>
+  </div>
+</div>
+
+<div class="container">
+
+<div class="toc-card">
+  <h2>Table of Contents</h2>
+  <ul class="toc-list">
+    <li><a href="#topology">Topology &amp; Design Goal</a></li>
+    <li><a href="#reading">The Reading Method</a></li>
+    <li><a href="#pcc-deep">How PCC Hashing Works</a></li>
+    <li><a href="#concepts">Connection Mark vs Routing Mark vs Table vs VRF</a></li>
+    <li><a href="#phase1">Phase 1 — Interface Lists, LAN, DHCP, DNS</a></li>
+    <li><a href="#phase2">Phase 2 — Routing Tables &amp; Default Routes</a></li>
+    <li><a href="#phase3">Phase 3 — NAT</a></li>
+    <li><a href="#phase4">Phase 4 — PCC Connection Marking</a></li>
+    <li><a href="#phase5">Phase 5 — Routing Marking</a></li>
+    <li><a href="#phase6">Phase 6 — Policy Routes for Marked Traffic</a></li>
+    <li><a href="#phase7">Phase 7 — Router-Originated Traffic</a></li>
+    <li><a href="#phase8">Phase 8 — FastTrack Warning</a></li>
+    <li><a href="#netwatch">Netwatch — Fast Failover</a></li>
+    <li><a href="#verify">Verification Commands</a></li>
+    <li><a href="#trouble">Troubleshooting</a></li>
+  </ul>
+</div>
+
+<div class="sc" id="topology">
+  <div class="sh"><div class="nb">1</div><h2>Topology &amp; Design Goal</h2></div>
+  <p class="lead">Two independent internet lines share the load. Every new connection is hashed to one WAN and stays there for its lifetime. If a WAN dies, its connections fail over automatically.</p>
+  <table class="dt">
+    <tr><th>Interface</th><th>Role</th><th>Router IP</th><th>Gateway</th></tr>
+    <tr><td>ether1</td><td>WAN1</td><td>192.168.2.100/24</td><td>192.168.2.1</td></tr>
+    <tr><td>ether2</td><td>WAN2</td><td>192.168.0.100/24</td><td>192.168.0.1</td></tr>
+    <tr><td>bridge2 (ether4+ether5)</td><td>LAN</td><td>192.168.10.1/24</td><td>—</td></tr>
+  </table>
+  <div class="callout explain">
+    <strong class="tag">Design Goal</strong>
+    PCC assigns each new TCP/UDP connection to a WAN once, using a hash. All subsequent packets of that connection follow the same WAN — preventing broken sessions (banking, video calls, VPNs). The two routing tables (<code class="inline">to-WAN1</code>, <code class="inline">to-WAN2</code>) enforce this per-connection path.
+  </div>
+</div>
+
+<div class="sc" id="reading">
+  <div class="sh"><div class="nb">2</div><h2>The Reading Method</h2></div>
+  <p class="lead">Every mangle rule is a sentence. Read it left to right as a chain of conditions and actions. The condition at the end is the gate — it must be true before the action fires.</p>
+
+  <div class="reading-method">
+    <h3>Example rule decoded token by token:</h3>
+    <pre class="cb" style="margin:0 0 14px;">add chain=prerouting action=mark-routing new-routing-mark=to-WAN1 \
+    passthrough=no connection-mark=WAN1-conn</pre>
+    <div class="rm-sentence">
+      <span class="rm-token rm-chain">chain=prerouting</span>
+      <span class="rm-token rm-action">action=mark-routing</span>
+      <span class="rm-token rm-mark">new-routing-mark=to-WAN1</span>
+      <span class="rm-token rm-pass">passthrough=no</span>
+      <span class="rm-token rm-cond">connection-mark=WAN1-conn (GATE)</span>
+    </div>
+  </div>
+
+  <table class="bd">
+    <tr><td class="cf">chain=prerouting</td><td class="mn">"In the prerouting chain..." — runs before the routing decision is made.</td></tr>
+    <tr><td class="cf">action=mark-routing</td><td class="mn">"...apply a routing mark to this packet..." — stamps a per-packet label the routing engine reads.</td></tr>
+    <tr><td class="cf">new-routing-mark=to-WAN1</td><td class="mn">"...the mark to apply is called 'to-WAN1'..."</td></tr>
+    <tr><td class="cf">passthrough=no</td><td class="mn">"...and stop processing further mangle rules after this." — the packet's fate is decided.</td></tr>
+    <tr><td class="cf">connection-mark=WAN1-conn</td><td class="mn">"...BUT ONLY IF this packet's connection is already tagged 'WAN1-conn'." — the gate, evaluated last.</td></tr>
+  </table>
+
+  <div class="callout plain">
+    <strong class="tag">Plain English</strong>
+    When a packet arrives in prerouting: check if it belongs to a connection already decided to use WAN1. If yes, stamp it "to-WAN1" and stop. If no, skip this rule entirely.
+  </div>
+</div>
+
+<div class="sc" id="pcc-deep">
+  <div class="sh"><div class="nb">3</div><h2>How PCC Hashing Actually Works</h2></div>
+  <p class="lead">PCC is a deterministic hash function built into RouterOS. It takes fields from the packet, computes a number, divides by the total bucket count, and checks the remainder. Same inputs always produce the same bucket — that's what keeps a connection on one WAN.</p>
+
+  <h3 style="margin-top:20px;">The Hash Formula</h3>
+  <div class="hash-visual">
+    <div class="hv-row"><span class="hv-label">Input fields:</span><span class="hv-val">src-IP + dst-IP + src-port + dst-port</span></div>
+    <div class="hv-sep"></div>
+    <div class="hv-row"><span class="hv-label">Hash function:</span><span class="hv-val">internal hash -> integer N</span></div>
+    <div class="hv-row"><span class="hv-label">Bucket formula:</span><span class="hv-val">N mod total_buckets = remainder</span></div>
+    <div class="hv-sep"></div>
+    <div class="hv-row"><span class="hv-label">Rule 2/0 catches:</span><span class="hv-bucket0">remainder = 0  -&gt;  WAN1-conn</span></div>
+    <div class="hv-row"><span class="hv-label">Rule 2/1 catches:</span><span class="hv-bucket1">remainder = 1  -&gt;  WAN2-conn</span></div>
+    <div class="hv-sep"></div>
+    <div class="hv-row"><span class="hv-label">Example A:</span><span class="hv-val">10.0.0.5:54321 -&gt; 8.8.8.8:443</span><span class="hv-arrow">=&gt;</span><span class="hv-bucket0">hash=4, 4 mod 2 = 0 -&gt; WAN1</span></div>
+    <div class="hv-row"><span class="hv-label">Example B:</span><span class="hv-val">10.0.0.7:49152 -&gt; 1.1.1.1:80</span><span class="hv-arrow">=&gt;</span><span class="hv-bucket1">hash=7, 7 mod 2 = 1 -&gt; WAN2</span></div>
+  </div>
+
+  <h3 style="margin-top:20px;">Classifier Modes Compared</h3>
+  <table class="dt">
+    <tr><th>Classifier</th><th>Fields Hashed</th><th>Best For</th><th>Weakness</th></tr>
+    <tr><td><code class="inline">src-address</code></td><td>Source IP only</td><td>Many different client IPs</td><td>One heavy user monopolizes a WAN</td></tr>
+    <tr><td><code class="inline">dst-address</code></td><td>Destination IP only</td><td>Spreading across many servers</td><td>All traffic to one server goes one WAN</td></tr>
+    <tr><td><code class="inline">both-addresses</code></td><td>Src IP + Dst IP</td><td>Balanced per client-server pair</td><td>Same client to same server always same WAN</td></tr>
+    <tr><td><code class="inline">both-addresses-and-ports</code></td><td>Src IP + Dst IP + Src Port + Dst Port</td><td>Best balance — each connection is unique</td><td>Slightly more CPU (negligible on hEX)</td></tr>
+  </table>
+
+  <div class="callout tip">
+    <strong class="tag">Why both-addresses-and-ports is recommended</strong>
+    A single client opening 10 connections to the same server (e.g. a browser loading a webpage) will get those connections split across both WANs, because each connection has a different source port. With <code class="inline">src-address</code> alone, all 10 connections from that client would always go to the same WAN.
+  </div>
+
+  <h3 style="margin-top:20px;">The N/M Syntax Decoded</h3>
+  <table class="bd">
+    <tr><td class="cf">both-addresses-and-ports:2/0</td><td class="mn"><strong>2</strong> = total number of buckets (= number of WANs). <strong>0</strong> = the bucket index this rule catches (0-indexed). So: hash mod 2 == 0.</td></tr>
+    <tr><td class="cf">both-addresses-and-ports:2/1</td><td class="mn">Same hash, same total (2), but catches bucket index <strong>1</strong>. Together, 2/0 + 2/1 = 100% of connections.</td></tr>
+    <tr><td class="cf">:3/0, :3/1, :3/2</td><td class="mn">For 3 WANs: three rules, each catching one third of connections.</td></tr>
+  </table>
+
+  <div class="callout explain">
+    <strong class="tag">Why the split is "roughly" 50/50</strong>
+    The hash distributes statistically, not perfectly. With 2 clients you might get an uneven split. With 100 clients you'll be very close to 50/50. PCC is a statistical load balancer, not a strict round-robin.
+  </div>
+</div>
+
+<div class="sc" id="concepts">
+  <div class="sh"><div class="nb">4</div><h2>Connection Mark vs Routing Mark vs Routing Table vs VRF</h2></div>
+  <p class="lead">These four concepts are often confused. They are distinct layers that work together in sequence.</p>
+
+  <div class="concept-grid">
+    <div class="concept-box">
+      <h4>Connection Mark</h4>
+      <p>Stored in <strong>conntrack</strong> (the connection tracking table). Persists for the entire lifetime of a connection. Set once when the connection is <code>new</code>. All packets of that connection can read it. Example: <code>WAN1-conn</code>.</p>
+    </div>
+    <div class="concept-box">
+      <h4>Routing Mark</h4>
+      <p>A <strong>per-packet</strong> label stamped in mangle. Lives only while the packet is being processed — not stored anywhere. Tells the routing engine "look in this specific routing table." Example: <code>to-WAN1</code>.</p>
+    </div>
+    <div class="concept-box">
+      <h4>Routing Table</h4>
+      <p>A named set of routes. The routing engine consults the table whose name matches the packet's routing mark. Contains its own default gateway. Example: table <code>to-WAN1</code> has gateway <code>192.168.2.1</code>.</p>
+    </div>
+    <div class="concept-box">
+      <h4>VRF (Virtual Routing &amp; Forwarding)</h4>
+      <p>A full network isolation layer — separate routing table <em>plus</em> separate interface binding. Much heavier than a simple routing table. PCC does <strong>not</strong> use VRF; it uses lightweight named routing tables with <code>fib</code>.</p>
+    </div>
+  </div>
+
+  <div class="flow">
+    <div class="fb">New packet -&gt; mangle prerouting</div>
+    <div class="fa">&#8595;</div>
+    <div class="fb">PCC hash -&gt; <strong>mark-connection</strong> (stored in conntrack forever)</div>
+    <div class="fa">&#8595;</div>
+    <div class="fb">Read connection mark -&gt; <strong>mark-routing</strong> (stamped on this packet only)</div>
+    <div class="fa">&#8595;</div>
+    <div class="fb">Routing engine reads routing mark -&gt; looks up matching <strong>routing table</strong></div>
+    <div class="fa">&#8595;</div>
+    <div class="fsplit">
+      <div class="fh w1">to-WAN1 table<br>gateway 192.168.2.1<br>exits ether1</div>
+      <div class="fh w2">to-WAN2 table<br>gateway 192.168.0.1<br>exits ether2</div>
+    </div>
+  </div>
+</div>
+
+<div class="sc" id="phase1">
+  <div class="sh"><div class="nb">5</div><h2>Phase 1 — Interface Lists, LAN IP, DHCP, DNS</h2></div>
+  <p class="lead">Foundation layer: name the router, group interfaces, build the LAN bridge, assign IPs, and configure DHCP and DNS for LAN clients.</p>
+
+<pre class="cb">/system identity
+set name="hEX-PCC-DualWAN"
+
+/interface list
+add name=WAN
+add name=LAN
+
+/interface list member
+add list=WAN interface=ether1
+add list=WAN interface=ether2
+
+/interface bridge
+add name=bridge2
+
+/interface bridge port
+add bridge=bridge2 interface=ether4
+add bridge=bridge2 interface=ether5
+
+/interface list member
+add list=LAN interface=bridge2
+
+/ip address
+add address=192.168.2.100/24  interface=ether1  comment="WAN1"
+add address=192.168.0.100/24  interface=ether2  comment="WAN2"
+add address=192.168.10.1/24   interface=bridge2 comment="LAN"
+
+/ip dns
+set servers=1.1.1.1,8.8.8.8 allow-remote-requests=yes
+
+/ip pool
+add name=lan-pool ranges=192.168.10.100-192.168.10.250
+
+/ip dhcp-server
+add name=dhcp-lan interface=bridge2 address-pool=lan-pool lease-time=12h disabled=no
+
+/ip dhcp-server network
+add address=192.168.10.0/24 gateway=192.168.10.1 dns-server=192.168.10.1,1.1.1.1</pre>
+
+  <table class="bd">
+    <tr><td class="cf">interface list WAN/LAN</td><td class="mn">Named groups. Firewall rules reference the group, not individual ports — add a new WAN port by updating the list, not every rule.</td></tr>
+    <tr><td class="cf">bridge2 (ether4+ether5)</td><td class="mn">Merges two physical ports into one Layer-2 domain. The LAN IP is bound to the bridge, not a port — so it serves all bridge members simultaneously.</td></tr>
+    <tr><td class="cf">allow-remote-requests=yes</td><td class="mn">Without this, only the router itself can use the configured DNS servers. LAN clients sending queries to 192.168.10.1 would get no response.</td></tr>
+    <tr><td class="cf">lan-pool: .100-.250</td><td class="mn">151 addresses for DHCP. Addresses .2-.99 are free for static assignments (servers, printers, etc.).</td></tr>
+  </table>
+</div>
+
+<div class="sc" id="phase2">
+  <div class="sh"><div class="nb">6</div><h2>Phase 2 — Routing Tables &amp; Main Default Routes</h2></div>
+  <p class="lead">Create the two custom routing tables that PCC-marked traffic will use, then add default routes to the main table for non-PCC traffic and failover.</p>
+
+<pre class="cb">/routing table
+add name=to-WAN1 fib
+add name=to-WAN2 fib
+
+/ip route
+add dst-address=0.0.0.0/0 gateway=192.168.2.1 distance=1 check-gateway=ping comment="main primary WAN1"
+add dst-address=0.0.0.0/0 gateway=192.168.0.1 distance=2 check-gateway=ping comment="main backup WAN2"</pre>
+
+  <table class="bd">
+    <tr><td class="cf">fib</td><td class="mn">"Forwarding Information Base" — required in RouterOS 7 to make a named table active for actual packet forwarding, not just route storage.</td></tr>
+    <tr><td class="cf">distance=1 / distance=2</td><td class="mn">Lower distance = higher priority. The distance=2 route is invisible to the routing engine while distance=1 is alive. It activates automatically when distance=1 fails.</td></tr>
+    <tr><td class="cf">check-gateway=ping</td><td class="mn">RouterOS continuously pings the gateway. Two consecutive failures (~20-30s) marks the route inactive, triggering automatic failover to the backup distance=2 route.</td></tr>
+  </table>
+
+  <div class="callout tip">
+    <strong class="tag">Tip — Per-Table Failover</strong>
+    Each custom table also needs its own backup route (added in Phase 6). The main-table routes here only cover traffic that bypassed PCC entirely (e.g. router-originated traffic before Phase 7 rules exist, or traffic that matched no mangle rule).
+  </div>
+</div>
+
+<div class="sc" id="phase3">
+  <div class="sh"><div class="nb">7</div><h2>Phase 3 — NAT (Masquerade)</h2></div>
+  <p class="lead">LAN devices use private IPs that don't exist on the internet. NAT rewrites the source address to the router's WAN IP so replies can find their way back.</p>
+
+<pre class="cb">/ip firewall nat
+add chain=srcnat out-interface=ether1 action=masquerade comment="NAT WAN1"
+add chain=srcnat out-interface=ether2 action=masquerade comment="NAT WAN2"</pre>
+
+  <table class="bd">
+    <tr><td class="cf">chain=srcnat</td><td class="mn">Fires just before a packet leaves the router — modifies the source address.</td></tr>
+    <tr><td class="cf">out-interface=ether1</td><td class="mn">Only applies to packets actually exiting through ether1. The second rule independently handles ether2.</td></tr>
+    <tr><td class="cf">action=masquerade</td><td class="mn">Automatically uses whatever IP is currently assigned to that interface — works even if the WAN IP changes (DHCP from ISP).</td></tr>
+  </table>
+
+  <div class="callout warning">
+    <strong class="tag">Why Two Separate Rules</strong>
+    A single masquerade rule without <code class="inline">out-interface</code> would use the "current" primary IP regardless of which WAN the packet actually left through — breaking return traffic on the non-primary WAN. Each interface must have its own explicit rule.
+  </div>
+</div>
+
+<div class="sc" id="phase4">
+  <div class="sh"><div class="nb">8</div><h2>Phase 4 — PCC Connection Marking</h2></div>
+  <p class="lead">This is the decision step. A brand-new connection is hashed once and tagged with a connection mark that persists in conntrack for the connection's entire lifetime.</p>
+
+<pre class="cb">/ip firewall mangle
+
+# Bypass: don't re-classify already-running connections
+add chain=prerouting connection-state=established \
+    action=accept passthrough=yes comment="skip established"
+
+add chain=prerouting connection-state=related \
+    action=accept passthrough=yes comment="skip related"
+
+# Bypass PCC entirely for local/private destinations
+add chain=prerouting dst-address-list=no-pcc \
+    action=accept passthrough=yes comment="no PCC for local traffic"
+
+# PCC hash - only fires on NEW connections without an existing connection-mark
+add chain=prerouting connection-state=new connection-mark=no-mark \
+    per-connection-classifier=both-addresses-and-ports:2/0 \
+    action=mark-connection new-connection-mark=WAN1-conn \
+    passthrough=yes comment="PCC bucket 0 -> WAN1"
+
+add chain=prerouting connection-state=new connection-mark=no-mark \
+    per-connection-classifier=both-addresses-and-ports:2/1 \
+    action=mark-connection new-connection-mark=WAN2-conn \
+    passthrough=yes comment="PCC bucket 1 -> WAN2"</pre>
+
+  <table class="bd">
+    <tr><td class="cf">connection-state=established / related</td><td class="mn">Traffic belonging to a connection that's already running (or a helper connection like FTP data) skips re-hashing entirely — its connection-mark was already set when it was new.</td></tr>
+    <tr><td class="cf">dst-address-list=no-pcc</td><td class="mn">A pre-built address list (RFC1918 ranges, the router's own subnets, etc.). Traffic to these destinations should always exit locally — accepted with no mark.</td></tr>
+    <tr><td class="cf">connection-state=new</td><td class="mn">Gate: only fresh connections reach the hash. This is what makes PCC "per-connection" instead of "per-packet" — the decision happens exactly once.</td></tr>
+    <tr><td class="cf">connection-mark=no-mark</td><td class="mn">Extra safety gate — ensures a connection that somehow already has a mark isn't re-hashed and potentially reassigned to a different WAN mid-session.</td></tr>
+    <tr><td class="cf">action=mark-connection</td><td class="mn">Writes the mark into conntrack (not just this packet). Every future packet of this connection will carry <code class="inline">connection-mark=WAN1-conn</code> automatically, with zero extra hashing.</td></tr>
+    <tr><td class="cf">passthrough=yes</td><td class="mn">Allow the packet to continue to the <em>next</em> mangle rule — because Phase 5 (mark-routing) still needs to process this same packet.</td></tr>
+  </table>
+
+  <div class="callout plain">
+    <strong class="tag">Plain English</strong>
+    If this connection is brand new and has never been marked before: hash it. If the hash lands on bucket 0, tag the connection "WAN1-conn" forever. If bucket 1, tag it "WAN2-conn" forever. Either way, keep processing — the routing mark still needs to be set.
+  </div>
+
+  <div class="callout warning">
+    <strong class="tag">Order Matters</strong>
+    These rules must appear <strong>before</strong> any general "accept" rule and <strong>after</strong> the established/related/no-pcc bypass rules. Mangle rules are evaluated top-to-bottom — a misplaced PCC rule can re-hash traffic that should have bypassed it.
+  </div>
+</div>
+
+<div class="sc" id="phase5">
+  <div class="sh"><div class="nb">9</div><h2>Phase 5 — Routing Marking</h2></div>
+  <p class="lead">Now every packet (new or returning) carries a connection-mark. This phase translates that connection-mark into a per-packet routing-mark that the routing engine can act on.</p>
+
+<pre class="cb">/ip firewall mangle
+add chain=prerouting connection-mark=WAN1-conn \
+    action=mark-routing new-routing-mark=to-WAN1 \
+    passthrough=no comment="route WAN1-marked conns via to-WAN1 table"
+
+add chain=prerouting connection-mark=WAN2-conn \
+    action=mark-routing new-routing-mark=to-WAN2 \
+    passthrough=no comment="route WAN2-marked conns via to-WAN2 table"</pre>
+
+  <table class="bd">
+    <tr><td class="cf">connection-mark=WAN1-conn</td><td class="mn">Gate: reads the persistent conntrack mark set in Phase 4 — this rule fires for every packet of that connection, forever, not just the first one.</td></tr>
+    <tr><td class="cf">action=mark-routing</td><td class="mn">Stamps a temporary per-packet label — exists only for the duration this packet is inside the router.</td></tr>
+    <tr><td class="cf">new-routing-mark=to-WAN1</td><td class="mn">The name must exactly match the routing table created in Phase 2 (<code class="inline">/routing table add name=to-WAN1</code>).</td></tr>
+    <tr><td class="cf">passthrough=no</td><td class="mn">This packet's classification is complete — stop processing further mangle rules for it.</td></tr>
+  </table>
+
+  <div class="callout explain">
+    <strong class="tag">Why Two Separate Mangle Phases?</strong>
+    Phase 4 decides <em>once per connection</em> (expensive hash, but only computed on the first packet). Phase 5 re-applies <em>every packet</em> (cheap lookup, no hashing) by simply reading the stored connection-mark. Splitting it this way means the CPU-heavy hash never runs more than once per connection.
+  </div>
+</div>
+
+<div class="sc" id="phase6">
+  <div class="sh"><div class="nb">10</div><h2>Phase 6 — Policy Routes for Marked Traffic</h2></div>
+  <p class="lead">The routing-mark set in Phase 5 tells the routing engine which table to consult. Each table needs its own default gateway — and its own backup route for failover.</p>
+
+<pre class="cb">/ip route
+add dst-address=0.0.0.0/0 gateway=192.168.2.1 routing-table=to-WAN1 \
+    distance=1 check-gateway=ping comment="WAN1 table primary"
+add dst-address=0.0.0.0/0 gateway=192.168.0.1 routing-table=to-WAN1 \
+    distance=2 check-gateway=ping comment="WAN1 table failover via WAN2"
+
+add dst-address=0.0.0.0/0 gateway=192.168.0.1 routing-table=to-WAN2 \
+    distance=1 check-gateway=ping comment="WAN2 table primary"
+add dst-address=0.0.0.0/0 gateway=192.168.2.1 routing-table=to-WAN2 \
+    distance=2 check-gateway=ping comment="WAN2 table failover via WAN1"</pre>
+
+  <table class="bd">
+    <tr><td class="cf">routing-table=to-WAN1</td><td class="mn">This route only exists inside the to-WAN1 table — invisible to the main table and to the to-WAN2 table. Packets only see it if their routing-mark matches.</td></tr>
+    <tr><td class="cf">distance=1 (primary)</td><td class="mn">Normal path: WAN1-marked traffic always exits via ether1's gateway.</td></tr>
+    <tr><td class="cf">distance=2 (failover)</td><td class="mn">If ether1's gateway stops responding to ping, this route activates — WAN1-marked connections now exit through WAN2 instead of dying.</td></tr>
+  </table>
+
+  <div class="flow">
+    <div class="fb">Packet routing-mark = to-WAN1</div>
+    <div class="fa">&#8595;</div>
+    <div class="fb">Look up table "to-WAN1"</div>
+    <div class="fa">&#8595;</div>
+    <div class="fsplit">
+      <div class="fh w1">Gateway 192.168.2.1 alive?<br>YES -&gt; exit ether1 (distance 1)</div>
+      <div class="fh w2">Gateway 192.168.2.1 dead?<br>YES -&gt; exit ether2 via WAN2 (distance 2)</div>
+    </div>
+  </div>
+
+  <div class="callout tip">
+    <strong class="tag">Best Practice</strong>
+    This cross-failover design means a WAN1-marked connection surviving a WAN1 outage will actually egress through WAN2's physical interface — but NAT (Phase 3) still correctly masquerades it because masquerade rules key off <code class="inline">out-interface</code>, not routing-mark.
+  </div>
+
+  <div class="callout warning">
+    <strong class="tag">Caveat — Asymmetric Routing During Failover</strong>
+    While failed over, both WAN1-marked and WAN2-marked connections may briefly share ether2's bandwidth. This is expected and acceptable — it's a temporary degraded state, not a misconfiguration.
+  </div>
+</div>
+
+<div class="sc" id="phase7">
+  <div class="sh"><div class="nb">11</div><h2>Phase 7 — Router-Originated Traffic</h2></div>
+  <p class="lead">Everything so far only handles traffic passing <em>through</em> the router (prerouting chain). Traffic the router itself generates — DNS lookups, NTP, ping, ROS updates — uses the <code class="inline">output</code> chain instead, which needs its own PCC rules.</p>
+
+<pre class="cb">/ip firewall mangle
+add chain=output connection-state=established action=accept passthrough=yes
+add chain=output connection-state=related action=accept passthrough=yes
+
+add chain=output connection-state=new connection-mark=no-mark \
+    per-connection-classifier=both-addresses-and-ports:2/0 \
+    action=mark-connection new-connection-mark=WAN1-conn passthrough=yes
+
+add chain=output connection-state=new connection-mark=no-mark \
+    per-connection-classifier=both-addresses-and-ports:2/1 \
+    action=mark-connection new-connection-mark=WAN2-conn passthrough=yes
+
+add chain=output connection-mark=WAN1-conn \
+    action=mark-routing new-routing-mark=to-WAN1 passthrough=no
+add chain=output connection-mark=WAN2-conn \
+    action=mark-routing new-routing-mark=to-WAN2 passthrough=no</pre>
+
+  <table class="bd">
+    <tr><td class="cf">chain=output</td><td class="mn">Fires only for packets whose source is the router itself — never for LAN-to-internet traffic (that's prerouting).</td></tr>
+    <tr><td class="cf">(identical hash + mark logic)</td><td class="mn">Mirrors Phases 4-5 exactly, so the router's own connections (e.g. a DNS query it sends to 8.8.8.8) are load-balanced the same way LAN traffic is.</td></tr>
+  </table>
+
+  <div class="callout explain">
+    <strong class="tag">Why This Is Easy to Forget</strong>
+    Without these output-chain rules, router-originated traffic (DNS resolution, NTP sync, package update checks) silently falls through to the main routing table's default route — always using WAN1 (distance=1), even if WAN1 is degraded but not fully down. This can cause DNS timeouts that look like a LAN problem but are actually a router self-traffic problem.
+  </div>
+</div>
+
+<div class="sc" id="phase8">
+  <div class="sh"><div class="nb">12</div><h2>Phase 8 — Disable FastTrack</h2></div>
+  <p class="lead">FastTrack is a RouterOS performance feature that lets established connections bypass the firewall and mangle chains entirely after the first few packets. This directly breaks PCC.</p>
+
+<pre class="cb">/ip firewall filter
+:if ([:len [find where action=fasttrack-connection]] > 0) do={
+    disable [find where action=fasttrack-connection]
+    :log warning "FastTrack rule found and disabled - required for PCC to function"
+} else={
+    :log info "No FastTrack rule present - OK"
+}</pre>
+
+  <table class="bd">
+    <tr><td class="cf">:if ([:len [find ...]] &gt; 0)</td><td class="mn">RouterOS scripting: checks whether any firewall filter rule with action=fasttrack-connection exists, in case one was added by default configuration or a previous script.</td></tr>
+    <tr><td class="cf">disable [find where ...]</td><td class="mn">Disables (does not delete) the rule — safer than removing it, and reversible if PCC is ever abandoned.</td></tr>
+  </table>
+
+  <div class="callout critical">
+    <strong class="tag">Critical — This Is Not Optional</strong>
+    FastTrack marks a connection after its first few packets and then routes all subsequent packets through a fast kernel path that <strong>skips mangle entirely</strong>. Since PCC's routing-mark is applied in mangle, a fast-tracked connection would silently ignore its assigned WAN and always use the main table's default route. Symptom: PCC "appears to work" for the first second of a connection, then traffic mysteriously shifts to WAN1 only. Always verify FastTrack is disabled after any factory-default script runs (RouterOS often ships a default fasttrack rule in <code class="inline">/ip firewall filter</code>).
+  </div>
+</div>
+
+<div class="sc" id="netwatch">
+  <div class="sh"><div class="nb">13</div><h2>Netwatch — Accelerating Failover</h2></div>
+  <p class="lead"><code class="inline">check-gateway=ping</code> alone takes roughly 20-30 seconds to detect a dead gateway. Netwatch can detect failure faster and immediately flush stale connections so they re-hash onto the surviving WAN instead of hanging.</p>
+
+  <div class="nw-compare">
+    <div class="nw-box slow">
+      <p>check-gateway=ping only</p>
+      <div class="nw-time">~20-30s</div>
+      <p>detection + route switch delay</p>
+    </div>
+    <div class="nw-box fast">
+      <p>check-gateway=ping + Netwatch</p>
+      <div class="nw-time">~5-10s</div>
+      <p>faster detection, connections flushed immediately</p>
+    </div>
+  </div>
+
+<pre class="cb">/tool netwatch
+add host=192.168.2.1 interval=5s timeout=1s \
+    up-script=":log info \"WAN1 gateway UP\"" \
+    down-script=":log warning \"WAN1 gateway DOWN - flushing WAN1 connections\"; /ip firewall connection remove [find where connection-mark=WAN1-conn]"
+
+add host=192.168.0.1 interval=5s timeout=1s \
+    up-script=":log info \"WAN2 gateway UP\"" \
+    down-script=":log warning \"WAN2 gateway DOWN - flushing WAN2 connections\"; /ip firewall connection remove [find where connection-mark=WAN2-conn]"</pre>
+
+  <table class="bd">
+    <tr><td class="cf">interval=5s timeout=1s</td><td class="mn">Pings every 5 seconds with a 1-second timeout — much more aggressive than the built-in check-gateway probe, so failures are detected sooner.</td></tr>
+    <tr><td class="cf">down-script: connection remove</td><td class="mn">Deletes existing conntrack entries for that WAN's connection-mark. This forces affected connections to be treated as "new" again on their next packet — triggering a fresh PCC hash that lands them on the still-alive WAN.</td></tr>
+  </table>
+
+  <div class="callout tip">
+    <strong class="tag">Tip</strong>
+    Without the connection-remove step, existing long-lived connections (SSH sessions, streaming) stay marked to the dead WAN's connection-mark until they naturally time out — Netwatch's flush makes recovery near-instant for active sessions too, not just new ones.
+  </div>
+</div>
+
+<div class="sc" id="verify">
+  <div class="sh"><div class="nb">14</div><h2>Verification Commands</h2></div>
+  <p class="lead">Run these after applying the configuration to confirm PCC is actually splitting traffic and failover behaves correctly.</p>
+
+  <div class="verify-block">
+    <div class="vb-label">Check connection marks are being applied</div>
+    <pre>/ip firewall connection print where connection-mark!=""</pre>
+  </div>
+
+  <div class="verify-block">
+    <div class="vb-label">Confirm routing table contents</div>
+    <pre>/ip route print where routing-table=to-WAN1
+/ip route print where routing-table=to-WAN2</pre>
+  </div>
+
+  <div class="verify-block">
+    <div class="vb-label">Watch mangle rule packet counters increase</div>
+    <pre>/ip firewall mangle print stats</pre>
+  </div>
+
+  <div class="verify-block">
+    <div class="vb-label">Confirm gateway reachability status</div>
+    <pre>/ip route print where check-gateway=ping</pre>
+  </div>
+
+  <div class="verify-block">
+    <div class="vb-label">Force-test failover (unplug ether1, then watch)</div>
+    <pre>/log print where topics~"route"
+/tool netwatch print</pre>
+  </div>
+
+  <div class="callout tip">
+    <strong class="tag">Real Test, Not Just Config Review</strong>
+    Open two browser tabs to a "what is my IP" site from two different LAN devices while both WANs are up — you should see two different public IPs, confirming PCC is actively splitting connections across both links.
+  </div>
+</div>
+
+<div class="sc" id="trouble">
+  <div class="sh"><div class="nb">15</div><h2>Troubleshooting</h2></div>
+  <p class="lead">Common symptoms and their root causes, based on how this configuration is structured.</p>
+
+  <table class="dt">
+    <tr><th>Symptom</th><th>Likely Cause</th></tr>
+    <tr><td>All traffic uses only WAN1</td><td>FastTrack still enabled (Phase 8) — bypasses mangle after first packets</td></tr>
+    <tr><td>DNS randomly fails / router loses internet but LAN works</td><td>Missing output-chain PCC rules (Phase 7) — router's own DNS queries hit main table only</td></tr>
+    <tr><td>Failover takes 20-30s and drops active sessions</td><td>Netwatch not configured — only relying on slow check-gateway detection with no connection flush</td></tr>
+    <tr><td>One LAN device's connections all go to the same WAN</td><td>Expected with <code class="inline">src-address</code> classifier — switch to <code class="inline">both-addresses-and-ports</code></td></tr>
+    <tr><td>LAN-to-LAN or LAN-to-router traffic broken/asymmetric</td><td>Missing or misconfigured <code class="inline">no-pcc</code> address list — local destinations must bypass PCC entirely</td></tr>
+    <tr><td>PCC "works" then traffic all shifts to WAN1 after a few seconds</td><td>Classic FastTrack symptom — connection fast-tracked mid-session, mangle no longer consulted</td></tr>
+  </table>
+</div>
+
+</div>
+
+<footer>
+  MikroTik RouterOS 7 Dual WAN PCC — Technical Reference &amp; Deep-Dive Guide
+</footer>
+
+</body>
+</html>

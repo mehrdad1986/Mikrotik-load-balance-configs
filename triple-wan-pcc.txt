@@ -1,0 +1,97 @@
+# ============================================================
+# RouterOS 7 - Triple WAN PCC Configuration
+# Legacy reference file with LTE support
+# ============================================================
+# This is a simple triple WAN PCC configuration for reference.
+# For production use, see: triple-wan-pcc-latest.rsc
+# For detailed documentation, see: README-triple-wan.md
+# ============================================================
+
+/interface bridge
+add comment="LAN bridge" name=bridge-LAN
+
+/ip pool
+add name=LAN-pool ranges=10.10.10.100-10.10.10.250
+
+/ip dhcp-server
+add address-pool=LAN-pool interface=bridge-LAN lease-time=12h name=LAN-DHCP
+
+/interface bridge port
+add bridge=bridge-LAN interface=ether4
+add bridge=bridge-LAN interface=ether5
+
+/ip address
+add address=192.168.2.100/24 interface=ether1 comment="WAN1 IP"
+add address=192.168.0.100/24 interface=ether2 comment="WAN2 IP"
+add address=10.42.182.53/24 interface=lte1 comment="WAN3 LTE IP"
+add address=10.10.10.1/24 interface=bridge-LAN comment="LAN Gateway"
+
+/ip dhcp-server network
+add address=10.10.10.0/24 gateway=10.10.10.1 dns-server=10.10.10.1,1.1.1.1
+
+/ip dns
+set allow-remote-requests=yes servers=1.1.1.1,8.8.8.8
+
+/ip firewall address-list
+add address=0.0.0.0/8 comment=Invalid list=no-pcc
+add address=10.0.0.0/8 comment=Private list=no-pcc
+add address=127.0.0.0/8 comment=Loopback list=no-pcc
+add address=169.254.0.0/16 comment="Link local" list=no-pcc
+add address=172.16.0.0/12 comment=Private list=no-pcc
+add address=192.168.0.0/16 comment=Private list=no-pcc
+add address=224.0.0.0/4 comment=Multicast list=no-pcc
+
+/ip firewall filter
+add action=accept chain=input comment="Accept established/related input" connection-state=established,related,untracked
+add action=drop chain=input comment="Drop invalid input" connection-state=invalid
+add action=accept chain=input comment="Allow LAN access to router" in-interface=bridge-LAN
+add action=accept chain=input comment="Allow ping" protocol=icmp
+add action=drop chain=input comment="Drop WAN1 access to router" in-interface=ether1
+add action=drop chain=input comment="Drop WAN2 access to router" in-interface=ether2
+add action=drop chain=input comment="Drop WAN3 (LTE) access to router" in-interface=lte1
+add action=accept chain=forward comment="Accept established/related forward" connection-state=established,related,untracked
+add action=drop chain=forward comment="Drop invalid forward" connection-state=invalid
+add action=accept chain=forward comment="Allow LAN to WAN1" in-interface=bridge-LAN out-interface=ether1
+add action=accept chain=forward comment="Allow LAN to WAN2" in-interface=bridge-LAN out-interface=ether2
+add action=accept chain=forward comment="Allow LAN to WAN3" in-interface=bridge-LAN out-interface=lte1
+add action=drop chain=forward comment="Drop unwanted WAN1 forward" connection-nat-state=!dstnat in-interface=ether1
+add action=drop chain=forward comment="Drop unwanted WAN2 forward" connection-nat-state=!dstnat in-interface=ether2
+add action=drop chain=forward comment="Drop unwanted WAN3 forward" connection-nat-state=!dstnat in-interface=lte1
+
+/ip firewall mangle
+add action=accept chain=prerouting comment="Skip PCC for local/private destinations" dst-address-list=no-pcc in-interface=bridge-LAN
+add action=mark-connection chain=prerouting comment="PCC bucket 0 to WAN1" connection-mark=no-mark connection-state=new dst-address-type=!local in-interface=bridge-LAN \
+    new-connection-mark=WAN1-conn per-connection-classifier=both-addresses-and-ports:3/0
+add action=mark-connection chain=prerouting comment="PCC bucket 1 to WAN2" connection-mark=no-mark connection-state=new dst-address-type=!local in-interface=bridge-LAN \
+    new-connection-mark=WAN2-conn per-connection-classifier=both-addresses-and-ports:3/1
+add action=mark-connection chain=prerouting comment="PCC bucket 2 to WAN3 LTE" connection-mark=no-mark connection-state=new dst-address-type=!local in-interface=bridge-LAN \
+    new-connection-mark=WAN3-conn per-connection-classifier=both-addresses-and-ports:3/2
+
+/ip firewall nat
+add action=masquerade chain=srcnat out-interface=ether1 comment="NAT via WAN1"
+add action=masquerade chain=srcnat out-interface=ether2 comment="NAT via WAN2"
+add action=masquerade chain=srcnat out-interface=lte1 comment="NAT via WAN3 LTE"
+
+/ip route
+add dst-address=0.0.0.0/0 gateway=192.168.2.1 distance=1 check-gateway=ping comment="Main default via WAN1"
+add dst-address=0.0.0.0/0 gateway=192.168.0.1 distance=2 check-gateway=ping comment="Backup default via WAN2"
+add dst-address=0.0.0.0/0 gateway=10.42.182.70 distance=3 check-gateway=ping comment="Backup default via WAN3 LTE"
+
+/ip routing-table
+add name=to-WAN1
+add name=to-WAN2
+add name=to-WAN3
+
+/ip route
+add dst-address=0.0.0.0/0 gateway=192.168.2.1 routing-table=to-WAN1 distance=1 check-gateway=ping
+add dst-address=0.0.0.0/0 gateway=192.168.0.1 routing-table=to-WAN1 distance=2 check-gateway=ping
+add dst-address=0.0.0.0/0 gateway=10.42.182.70 routing-table=to-WAN1 distance=3 check-gateway=ping
+add dst-address=0.0.0.0/0 gateway=192.168.0.1 routing-table=to-WAN2 distance=1 check-gateway=ping
+add dst-address=0.0.0.0/0 gateway=192.168.2.1 routing-table=to-WAN2 distance=2 check-gateway=ping
+add dst-address=0.0.0.0/0 gateway=10.42.182.70 routing-table=to-WAN2 distance=3 check-gateway=ping
+add dst-address=0.0.0.0/0 gateway=10.42.182.70 routing-table=to-WAN3 distance=1 check-gateway=ping
+add dst-address=0.0.0.0/0 gateway=192.168.2.1 routing-table=to-WAN3 distance=2 check-gateway=ping
+add dst-address=0.0.0.0/0 gateway=192.168.0.1 routing-table=to-WAN3 distance=3 check-gateway=ping
+
+/system identity
+set name=Triple-WAN-PCC-Router

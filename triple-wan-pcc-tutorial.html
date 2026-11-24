@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RouterOS 7 Triple-WAN PCC Configuration</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #111936;
+      --panel2: #172044;
+      --text: #edf2ff;
+      --muted: #aeb9d6;
+      --accent: #4f8cff;
+      --accent2: #22c55e;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+      --code: #07111f;
+      --border: rgba(255,255,255,.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(79,140,255,.25), transparent 35%),
+        radial-gradient(circle at top right, rgba(34,197,94,.16), transparent 30%),
+        linear-gradient(135deg, #070b16, #0b1020 45%, #101a33);
+      color: var(--text);
+      line-height: 1.65;
+    }
+
+    .wrap {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 36px 0 70px;
+    }
+
+    .hero {
+      padding: 34px;
+      border: 1px solid var(--border);
+      border-radius: 28px;
+      background:
+        linear-gradient(135deg, rgba(255,255,255,.08), rgba(255,255,255,.025)),
+        rgba(17,25,54,.75);
+      box-shadow: 0 24px 70px rgba(0,0,0,.35);
+      backdrop-filter: blur(10px);
+      margin-bottom: 28px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: rgba(79,140,255,.14);
+      color: #bcd4ff;
+      border: 1px solid rgba(79,140,255,.35);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .3px;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 18px 0 8px;
+      font-size: clamp(32px, 5vw, 58px);
+      line-height: 1.05;
+      letter-spacing: -1.8px;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      max-width: 850px;
+      font-size: 18px;
+      margin: 0;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin-top: 26px;
+    }
+
+    .card {
+      padding: 18px;
+      border-radius: 20px;
+      background: rgba(23,32,68,.78);
+      border: 1px solid var(--border);
+    }
+
+    .card strong {
+      display: block;
+      color: #fff;
+      font-size: 15px;
+      margin-bottom: 6px;
+    }
+
+    .card span {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .phase {
+      margin: 18px 0;
+      padding: 24px;
+      border-radius: 24px;
+      background: rgba(17,25,54,.78);
+      border: 1px solid var(--border);
+      box-shadow: 0 14px 40px rgba(0,0,0,.22);
+    }
+
+    .phase-header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 10px;
+    }
+
+    .phase-num {
+      width: 42px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      border-radius: 14px;
+      background: linear-gradient(135deg, var(--accent), #7c3aed);
+      color: white;
+      font-weight: 900;
+      box-shadow: 0 10px 24px rgba(79,140,255,.28);
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 24px;
+      letter-spacing: -.4px;
+    }
+
+    h3 {
+      margin-top: 24px;
+      color: #d7e5ff;
+    }
+
+    .lead {
+      color: var(--muted);
+      margin-top: 4px;
+      margin-bottom: 18px;
+    }
+
+    pre {
+      position: relative;
+      overflow-x: auto;
+      white-space: pre;
+      padding: 18px 18px;
+      border-radius: 16px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01)),
+        var(--code);
+      border: 1px solid rgba(148,163,184,.18);
+      color: #d7fbe8;
+      font-size: 14px;
+      line-height: 1.55;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.02);
+    }
+
+    code.inline {
+      padding: 2px 6px;
+      border-radius: 7px;
+      background: rgba(255,255,255,.08);
+      color: #d7fbe8;
+    }
+
+    .explain, .warning, .tip {
+      margin-top: 14px;
+      padding: 14px 16px;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      color: #dce6ff;
+    }
+
+    .explain {
+      background: rgba(79,140,255,.10);
+      border-color: rgba(79,140,255,.28);
+    }
+
+    .warning {
+      background: rgba(245,158,11,.12);
+      border-color: rgba(245,158,11,.35);
+    }
+
+    .tip {
+      background: rgba(34,197,94,.10);
+      border-color: rgba(34,197,94,.3);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 18px;
+      overflow: hidden;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+    }
+
+    th, td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+    }
+
+    th {
+      background: rgba(255,255,255,.08);
+      color: #fff;
+    }
+
+    td {
+      color: var(--muted);
+    }
+
+    .copy-button, .download-button {
+      cursor: pointer;
+      border: 0;
+      border-radius: 12px;
+      padding: 9px 13px;
+      font-weight: 800;
+      color: white;
+      background: linear-gradient(135deg, var(--accent), #7c3aed);
+      box-shadow: 0 10px 22px rgba(79,140,255,.25);
+      margin: 8px 8px 6px 0;
+    }
+
+    .download-button {
+      background: linear-gradient(135deg, var(--accent2), #0891b2);
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 24px 0 0;
+    }
+
+    .footer {
+      margin-top: 28px;
+      color: var(--muted);
+      text-align: center;
+      font-size: 14px;
+    }
+
+    @media (max-width: 900px) {
+      .grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 560px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hero, .phase {
+        padding: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <span class="badge">RouterOS 7 Triple-WAN PCC</span>
+      <h1>Triple-WAN PCC Load Balancing + Failover</h1>
+      <p class="subtitle">
+        MikroTik RouterOS 7 configuration for three uplinks:
+        <strong>ether1</strong>, <strong>ether2</strong>, and <strong>lte1</strong>,
+        with LAN on <strong>ether4</strong> and <strong>ether5</strong>.
+      </p>
+
+      <div class="grid">
+        <div class="card">
+          <strong>WAN1</strong>
+          <span>ether1 — 192.168.2.100/24<br>Gateway: 192.168.2.1</span>
+        </div>
+        <div class="card">
+          <strong>WAN2</strong>
+          <span>ether2 — 192.168.0.100/24<br>Gateway: 192.168.0.1</span>
+        </div>
+        <div class="card">
+          <strong>WAN3 LTE</strong>
+          <span>lte1 — 10.42.182.53/24<br>Gateway: 10.42.182.70</span>
+        </div>
+        <div class="card">
+          <strong>LAN</strong>
+          <span>ether4 + ether5<br>Bridge: bridge-LAN</span>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <button class="download-button" onclick="downloadFullScript()">Download RouterOS Script</button>
+      </div>
+    </section>
+
+    <section class="phase" id="phase-1-backup">
+      <div class="phase-header">
+        <div class="phase-num">1</div>
+        <h2>Phase 1: Backup Before Applying</h2>
+      </div>
+      <p class="lead">Always backup your current RouterOS configuration before applying a new PCC setup.</p>
+
+<pre class="routeros-script">/system backup save name=before-triple-wan-pcc
+/export file=before-triple-wan-pcc-export</pre>
+
+      <div class="warning">
+        <strong>Important:</strong> Do not apply this blindly on a production router. Test step by step, especially if you are connected remotely.
+      </div>
+    </section>
+
+    <section class="phase" id="phase-2-system-interfaces">
+      <div class="phase-header">
+        <div class="phase-num">2</div>
+        <h2>Phase 2: System Identity and Interface Names</h2>
+      </div>
+      <p class="lead">Rename Ethernet interfaces and prepare a bridge for LAN ports ether4 and ether5.</p>
+
+<pre class="routeros-script">/system identity set name=Triple-WAN-PCC-Router
+
+/interface ethernet
+set [find default-name=ether1] name=ether1 comment="WAN1 - 192.168.2.100/24"
+set [find default-name=ether2] name=ether2 comment="WAN2 - 192.168.0.100/24"
+set [find default-name=ether4] name=ether4 comment="LAN Port 1"
+set [find default-name=ether5] name=ether5 comment="LAN Port 2"</pre>
+
+<pre class="routeros-script">/interface bridge
+add name=bridge-LAN protocol-mode=rstp comment="LAN bridge for ether4 and ether5"
+
+/interface bridge port
+add bridge=bridge-LAN interface=ether4
+add bridge=bridge-LAN interface=ether5</pre>
+
+      <div class="explain">
+        <strong>Why:</strong> LAN traffic should enter the PCC rules through one logical interface,
+        so ether4 and ether5 are placed inside <code class="inline">bridge-LAN</code>.
+      </div>
+    </section>
+
+    <section class="phase" id="phase-3-ip-addresses">
+      <div class="phase-header">
+        <div class="phase-num">3</div>
+        <h2>Phase 3: IP Address Configuration</h2>
+      </div>
+      <p class="lead">Assign your WAN and LAN IP addresses.</p>
+
+<pre class="routeros-script">/ip address
+add address=192.168.2.100/24 interface=ether1 comment="WAN1 IP"
+add address=192.168.0.100/24 interface=ether2 comment="WAN2 IP"
+add address=10.42.182.53/24 interface=lte1 comment="WAN3 LTE IP"
+add address=10.10.10.1/24 interface=bridge-LAN comment="LAN Gateway - CHANGE IF NEEDED"</pre>
+
+      <div class="warning">
+        <strong>LAN subnet note:</strong> I used <code class="inline">10.10.10.1/24</code> for LAN because you did not specify the LAN IP range.
+        Change it to your real LAN subnet if required.
+      </div>
+    </section>
+
+    <section class="phase" id="phase-4-routing-tables">
+      <div class="phase-header">
+        <div class="phase-num">4</div>
+        <h2>Phase 4: RouterOS 7 Routing Tables</h2>
+      </div>
+      <p class="lead">RouterOS 7 uses named routing tables for policy routing.</p>
+
+<pre class="routeros-script">/routing table
+add name=to-WAN1 fib
+add name=to-WAN2 fib
+add name=to-WAN3 fib</pre>
+
+      <div class="explain">
+        <strong>Why:</strong> PCC will mark traffic with <code class="inline">to-WAN1</code>,
+        <code class="inline">to-WAN2</code>, or <code class="inline">to-WAN3</code>.
+        These routing tables must exist before policy routes are used.
+      </div>
+    </section>
+
+    <section class="phase" id="phase-5-main-failover-routes">
+      <div class="phase-header">
+        <div class="phase-num">5</div>
+        <h2>Phase 5: Main Default Routes and Failover</h2>
+      </div>
+      <p class="lead">These routes are used by normal unmarked router traffic and as general failover defaults.</p>
+
+<pre class="routeros-script">/ip route
+add dst-address=0.0.0.0/0 gateway=192.168.2.1 distance=1 check-gateway=ping comment="Main default via WAN1"
+add dst-address=0.0.0.0/0 gateway=192.168.0.1 distance=2 check-gateway=ping comment="Backup default via WAN2"
+add dst-address=0.0.0.0/0 gateway=10.42.182.70 distance=3 check-gateway=ping comment="Backup default via WAN3 LTE"</pre>
+
+      <table>
+        <tr>
+          <th>Priority</th>
+          <th>Interface</th>
+          <th>Gateway</th>
+          <th>Distance</th>
+        </tr>
+        <tr>
+          <td>Primary</td>
+          <td>ether1</td>
+          <td>192.168.2.1</td>
+          <td>1</td>
+        </tr>
+        <tr>
+          <td>Secondary</td>
+          <td>ether2</td>
+          <td>192.168.0.1</td>
+          <td>2</td>
+        </tr>
+        <tr>
+          <td>Third / LTE</td>
+          <td>lte1</td>
+          <td>10.42.182.70</td>
+          <td>3</td>
+        </tr>
+      </table>
+    </section>
+
+    <section class="phase" id="phase-6-pcc-connection-marking">
+      <div class="phase-header">
+        <div class="phase-num">6</div>
+        <h2>Phase 6: PCC Connection Marking</h2>
+      </div>
+      <p class="lead">Split LAN connections into three PCC buckets: WAN1, WAN2, and WAN3.</p>
+
+<pre class="routeros-script">/ip firewall mangle
+add chain=prerouting connection-state=established,related action=accept comment="Accept established/related"
+
+add chain=prerouting in-interface=bridge-LAN connection-mark=no-mark \
+    per-connection-classifier=both-addresses-and-ports:3/0 \
+    action=mark-connection new-connection-mark=WAN1-conn passthrough=yes \
+    comment="PCC bucket 0 to WAN1"
+
+add chain=prerouting in-interface=bridge-LAN connection-mark=no-mark \
+    per-connection-classifier=both-addresses-and-ports:3/1 \
+    action=mark-connection new-connection-mark=WAN2-conn passthrough=yes \
+    comment="PCC bucket 1 to WAN2"
+
+add chain=prerouting in-interface=bridge-LAN connection-mark=no-mark \
+    per-connection-classifier=both-addresses-and-ports:3/2 \
+    action=mark-connection new-connection-mark=WAN3-conn passthrough=yes \
+    comment="PCC bucket 2 to WAN3 LTE"</pre>
+
+      <div class="explain">
+        <strong>Why:</strong> <code class="inline">:3/0</code>, <code class="inline">:3/1</code>,
+        and <code class="inline">:3/2</code> divide new LAN connections into three PCC groups.
+      </div>
+    </section>
+
+    <section class="phase" id="phase-7-routing-marking">
+      <div class="phase-header">
+        <div class="phase-num">7</div>
+        <h2>Phase 7: Routing Marking</h2>
+      </div>
+      <p class="lead">Apply routing marks based on the connection marks created by PCC.</p>
+
+<pre class="routeros-script">/ip firewall mangle
+add chain=prerouting in-interface=bridge-LAN connection-mark=WAN1-conn \
+    action=mark-routing new-routing-mark=to-WAN1 passthrough=no \
+    comment="Route marked WAN1 connections via table to-WAN1"
+
+add chain=prerouting in-interface=bridge-LAN connection-mark=WAN2-conn \
+    action=mark-routing new-routing-mark=to-WAN2 passthrough=no \
+    comment="Route marked WAN2 connections via table to-WAN2"
+
+add chain=prerouting in-interface=bridge-LAN connection-mark=WAN3-conn \
+    action=mark-routing new-routing-mark=to-WAN3 passthrough=no \
+    comment="Route marked WAN3 connections via table to-WAN3"</pre>
+
+      <div class="explain">
+        <strong>Why:</strong> Connection marks classify traffic. Routing marks force that traffic to use the correct RouterOS 7 routing table.
+      </div>
+    </section>
+
+    <section class="phase" id="phase-8-router-output-marking">
+      <div class="phase-header">
+        <div class="phase-num">8</div>
+        <h2>Phase 8: Router-Originated Traffic Marking</h2>
+      </div>
+      <p class="lead">Optional PCC for traffic generated by the router itself, such as DNS, NTP, update checks, or pings.</p>
+
+<pre class="routeros-script">/ip firewall mangle
+add chain=output connection-mark=no-mark \
+    per-connection-classifier=both-addresses-and-ports:3/0 \
+    action=mark-connection new-connection-mark=WAN1-conn passthrough=yes \
+    comment="Router output PCC bucket 0 to WAN1"
+
+add chain=output connection-mark=no-mark \
+    per-connection-classifier=both-addresses-and-ports:3/1 \
+    action=mark-connection new-connection-mark=WAN2-conn passthrough=yes \
+    comment="Router output PCC bucket 1 to WAN2"
+
+add chain=output connection-mark=no-mark \
+    per-connection-classifier=both-addresses-and-ports:3/2 \
+    action=mark-connection new-connection-mark=WAN3-conn passthrough=yes \
+    comment="Router output PCC bucket 2 to WAN3"
+
+add chain=output connection-mark=WAN1-conn \
+    action=mark-routing new-routing-mark=to-WAN1 passthrough=no
+
+add chain=output connection-mark=WAN2-conn \
+    action=mark-routing new-routing-mark=to-WAN2 passthrough=no
+
+add chain=output connection-mark=WAN3-conn \
+    action=mark-routing new-routing-mark=to-WAN3 passthrough=no</pre>
+
+      <div class="tip">
+        <strong>Tip:</strong> If you want the router itself to always use WAN1 first, you can skip this phase.
+      </div>
+    </section>
+
+    <section class="phase" id="phase-9-policy-routes">
+      <div class="phase-header">
+        <div class="phase-num">9</div>
+        <h2>Phase 9: Policy Routes for PCC Tables</h2>
+      </div>
+      <p class="lead">Each PCC table gets its preferred WAN plus fallback routes.</p>
+
+<pre class="routeros-script">/ip route
+add dst-address=0.0.0.0/0 gateway=192.168.2.1 routing-table=to-WAN1 distance=1 check-gateway=ping comment="to-WAN1 primary via WAN1"
+add dst-address=0.0.0.0/0 gateway=192.168.0.1 routing-table=to-WAN1 distance=2 check-gateway=ping comment="to-WAN1 fallback via WAN2"
+add dst-address=0.0.0.0/0 gateway=10.42.182.70 routing-table=to-WAN1 distance=3 check-gateway=ping comment="to-WAN1 fallback via WAN3 LTE"
+
+add dst-address=0.0.0.0/0 gateway=192.168.0.1 routing-table=to-WAN2 distance=1 check-gateway=ping comment="to-WAN2 primary via WAN2"
+add dst-address=0.0.0.0/0 gateway=192.168.2.1 routing-table=to-WAN2 distance=2 check-gateway=ping comment="to-WAN2 fallback via WAN1"
+add dst-address=0.0.0.0/0 gateway=10.42.182.70 routing-table=to-WAN2 distance=3 check-gateway=ping comment="to-WAN2 fallback via WAN3 LTE"
+
+add dst-address=0.0.0.0/0 gateway=10.42.182.70 routing-table=to-WAN3 distance=1 check-gateway=ping comment="to-WAN3 primary via WAN3 LTE"
+add dst-address=0.0.0.0/0 gateway=192.168.2.1 routing-table=to-WAN3 distance=2 check-gateway=ping comment="to-WAN3 fallback via WAN1"
+add dst-address=0.0.0.0/0 gateway=192.168.0.1 routing-table=to-WAN3 distance=3 check-gateway=ping comment="to-WAN3 fallback via WAN2"</pre>
+
+      <div class="explain">
+        <strong>Why:</strong> If a WAN fails, traffic already marked for that WAN still has fallback paths inside the same routing table.
+      </div>
+    </section>
+
+    <section class="phase" id="phase-10-nat">
+      <div class="phase-header">
+        <div class="phase-num">10</div>
+        <h2>Phase 10: NAT Masquerade</h2>
+      </div>
+      <p class="lead">Add separate masquerade rules for each outgoing WAN interface.</p>
+
+<pre class="routeros-script">/ip firewall nat
+add chain=srcnat out-interface=ether1 action=masquerade comment="NAT via WAN1"
+add chain=srcnat out-interface=ether2 action=masquerade comment="NAT via WAN2"
+add chain=srcnat out-interface=lte1 action=masquerade comment="NAT via WAN3 LTE"</pre>
+
+      <div class="warning">
+        <strong>Important:</strong> Each WAN must have its own NAT rule, otherwise PCC-routed traffic may leave with the wrong source address.
+      </div>
+    </section>
+
+    <section class="phase" id="phase-11-dns">
+      <div class="phase-header">
+        <div class="phase-num">11</div>
+        <h2>Phase 11: DNS</h2>
+      </div>
+      <p class="lead">Enable DNS forwarding for LAN clients.</p>
+
+<pre class="routeros-script">/ip dns
+set servers=1.1.1.1,8.8.8.8 allow-remote-requests=yes</pre>
+    </section>
+
+    <section class="phase" id="phase-12-optional-dhcp">
+      <div class="phase-header">
+        <div class="phase-num">12</div>
+        <h2>Phase 12: Optional DHCP Server for LAN</h2>
+      </div>
+      <p class="lead">Use this only if your MikroTik should provide DHCP to LAN clients.</p>
+
+<pre class="routeros-script">/ip pool
+add name=LAN-pool ranges=10.10.10.100-10.10.10.250
+
+/ip dhcp-server
+add name=LAN-DHCP interface=bridge-LAN address-pool=LAN-pool disabled=no
+
+/ip dhcp-server network
+add address=10.10.10.0/24 gateway=10.10.10.1 dns-server=10.10.10.1,1.1.1.1</pre>
+
+      <div class="warning">
+        <strong>Change if needed:</strong> This DHCP block matches the example LAN subnet <code class="inline">10.10.10.0/24</code>.
+      </div>
+    </section>
+
+    <section class="phase" id="phase-13-netwatch">
+      <div class="phase-header">
+        <div class="phase-num">13</div>
+        <h2>Phase 13: Netwatch Fast Failover</h2>
+      </div>
+      <p class="lead">Clear existing connections when a WAN gateway becomes unreachable.</p>
+
+<pre class="routeros-script">/tool netwatch
+add host=192.168.2.1 interval=5s timeout=2s \
+    down-script="/ip firewall connection remove [find connection-mark=WAN1-conn]" \
+    comment="Monitor WAN1 gateway"
+
+add host=192.168.0.1 interval=5s timeout=2s \
+    down-script="/ip firewall connection remove [find connection-mark=WAN2-conn]" \
+    comment="Monitor WAN2 gateway"
+
+add host=10.42.182.70 interval=5s timeout=2s \
+    down-script="/ip firewall connection remove [find connection-mark=WAN3-conn]" \
+    comment="Monitor WAN3 LTE gateway"</pre>
+
+      <div class="tip">
+        <strong>Tip:</strong> Gateway monitoring checks only the next hop. For stronger internet-health checking,
+        you can later replace or extend this with recursive routes to public targets.
+      </div>
+    </section>
+
+    <section class="phase" id="phase-14-checks">
+      <div class="phase-header">
+        <div class="phase-num">14</div>
+        <h2>Phase 14: Verification Commands</h2>
+      </div>
+      <p class="lead">Use these commands after applying the config.</p>
+
+<pre class="routeros-script">/ip address print
+/ip route print detail
+/routing table print
+/ip firewall mangle print stats
+/ip firewall nat print
+/tool netwatch print detail
+/ping 1.1.1.1
+/tool traceroute 1.1.1.1</pre>
+    </section>
+
+    <div class="footer">
+      Triple-WAN PCC RouterOS 7 HTML configuration guide.
+    </div>
+  </main>
+
+  <script>
+    document.querySelectorAll('pre').forEach(function(codeBlock) {
+      var copyButton = document.createElement('button');
+      copyButton.className = 'copy-button';
+      copyButton.type = 'button';
+      copyButton.innerText = 'Copy';
+      codeBlock.parentNode.insertBefore(copyButton, codeBlock);
+
+      copyButton.addEventListener('click', function() {
+        var code = codeBlock.innerText;
+        navigator.clipboard.writeText(code).then(function() {
+          copyButton.innerText = 'Copied!';
+          setTimeout(function() {
+            copyButton.innerText = 'Copy';
+          }, 1600);
+        }).catch(function() {
+          copyButton.innerText = 'Failed!';
+        });
+      });
+    });
+
+    function downloadFullScript() {
+      var blocks = document.querySelectorAll('pre.routeros-script');
+      var output = '';
+      output += '# Triple-WAN PCC RouterOS 7 Script\\n';
+      output += '# WAN1 ether1: 192.168.2.100/24 gateway 192.168.2.1\\n';
+      output += '# WAN2 ether2: 192.168.0.100/24 gateway 192.168.0.1\\n';
+      output += '# WAN3 lte1: 10.42.182.53/24 gateway 10.42.182.70\\n';
+      output += '# LAN bridge-LAN: ether4 + ether5\\n\\n';
+
+      blocks.forEach(function(block) {
+        output += block.innerText.trim() + '\\n\\n';
+      });
+
+      var blob = new Blob([output], { type: 'text/plain' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'triple-wan-pcc-routeros.rsc';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+  </script>
+</body>
+</html>

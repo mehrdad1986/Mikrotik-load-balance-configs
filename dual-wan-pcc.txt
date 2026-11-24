@@ -1,0 +1,83 @@
+# ============================================================
+# RouterOS 7.23.2 - Dual WAN PCC Configuration
+# Legacy reference file
+# ============================================================
+# This is a simple dual WAN PCC configuration for reference.
+# For production use, see: dual-wan-pcc-latest.rsc
+# For detailed documentation, see: README-dual-wan.md
+# ============================================================
+
+/interface bridge
+add comment="LAN bridge" name=bridge2
+
+/ip pool
+add name=lan-pool ranges=192.168.10.100-192.168.10.250
+
+/ip dhcp-server
+add address-pool=lan-pool interface=bridge2 lease-time=12h name=dhcp-lan
+
+/routing table
+add fib name=to-wan1
+add fib name=to-wan2
+
+/interface bridge port
+add bridge=bridge2 interface=ether4
+add bridge=bridge2 interface=ether5
+
+/ip address
+add address=192.168.2.100/24 comment="WAN1 IP" interface=ether1 network=192.168.2.0
+add address=192.168.0.100/24 comment="WAN2 IP" interface=ether2 network=192.168.0.0
+add address=192.168.10.1/24 comment="LAN IP" interface=bridge2 network=192.168.10.0
+
+/ip dhcp-server network
+add address=192.168.10.0/24 dns-server=192.168.10.1,1.1.1.1 gateway=192.168.10.1
+
+/ip dns
+set allow-remote-requests=yes servers=1.1.1.1,8.8.8.8
+
+/ip firewall address-list
+add address=0.0.0.0/8 comment=Invalid list=no-pcc
+add address=10.0.0.0/8 comment=Private list=no-pcc
+add address=127.0.0.0/8 comment=Loopback list=no-pcc
+add address=169.254.0.0/16 comment="Link local" list=no-pcc
+add address=172.16.0.0/12 comment=Private list=no-pcc
+add address=192.168.0.0/16 comment=Private list=no-pcc
+add address=224.0.0.0/4 comment=Multicast list=no-pcc
+
+/ip firewall filter
+add action=accept chain=input comment="Accept established/related input" connection-state=established,related,untracked
+add action=drop chain=input comment="Drop invalid input" connection-state=invalid
+add action=accept chain=input comment="Allow LAN access to router" in-interface=bridge2
+add action=accept chain=input comment="Allow ping" protocol=icmp
+add action=drop chain=input comment="Drop WAN1 access to router" in-interface=ether1
+add action=drop chain=input comment="Drop WAN2 access to router" in-interface=ether2
+add action=accept chain=forward comment="Accept established/related forward" connection-state=established,related,untracked
+add action=drop chain=forward comment="Drop invalid forward" connection-state=invalid
+add action=accept chain=forward comment="Allow LAN to WAN1" in-interface=bridge2 out-interface=ether1
+add action=accept chain=forward comment="Allow LAN to WAN2" in-interface=bridge2 out-interface=ether2
+add action=drop chain=forward comment="Drop unwanted WAN1 forward" connection-nat-state=!dstnat in-interface=ether1
+add action=drop chain=forward comment="Drop unwanted WAN2 forward" connection-nat-state=!dstnat in-interface=ether2
+
+/ip firewall mangle
+add action=accept chain=prerouting comment="Skip PCC for local/private destinations" dst-address-list=no-pcc in-interface=bridge2
+add action=mark-connection chain=prerouting comment="PCC classify connections to WAN1" connection-mark=no-mark connection-state=new dst-address-type=!local in-interface=bridge2 \
+    new-connection-mark=wan1-conn per-connection-classifier=both-addresses-and-ports:2/0
+add action=mark-connection chain=prerouting comment="PCC classify connections to WAN2" connection-mark=no-mark connection-state=new dst-address-type=!local in-interface=bridge2 \
+    new-connection-mark=wan2-conn per-connection-classifier=both-addresses-and-ports:2/1
+add action=mark-routing chain=prerouting comment="Route WAN1-marked traffic via to-wan1" connection-mark=wan1-conn in-interface=bridge2 new-routing-mark=to-wan1 passthrough=no
+add action=mark-routing chain=prerouting comment="Route WAN2-marked traffic via to-wan2" connection-mark=wan2-conn in-interface=bridge2 new-routing-mark=to-wan2 passthrough=no
+
+/ip firewall nat
+add action=masquerade chain=srcnat comment="NAT WAN1" out-interface=ether1
+add action=masquerade chain=srcnat comment="NAT WAN2" out-interface=ether2
+
+/ip route
+add check-gateway=ping comment="to-wan1 primary via WAN1" distance=1 dst-address=0.0.0.0/0 gateway=192.168.2.1 routing-table=to-wan1
+add check-gateway=ping comment="to-wan1 backup via WAN2" distance=2 dst-address=0.0.0.0/0 gateway=192.168.0.1 routing-table=to-wan1
+add check-gateway=ping comment="to-wan2 primary via WAN2" distance=1 dst-address=0.0.0.0/0 gateway=192.168.0.1 routing-table=to-wan2
+add check-gateway=ping comment="to-wan2 backup via WAN1" distance=2 dst-address=0.0.0.0/0 gateway=192.168.2.1 routing-table=to-wan2
+add check-gateway=ping comment="main primary via WAN1" distance=1 dst-address=0.0.0.0/0 gateway=192.168.2.1
+add check-gateway=ping comment="main backup via WAN2" distance=2 dst-address=0.0.0.0/0 gateway=192.168.0.1
+
+/system identity
+set name=hEX-PCC-DualWAN
